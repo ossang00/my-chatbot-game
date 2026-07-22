@@ -169,8 +169,11 @@ def validate_user_word(api_key, word, max_checks=3):
 
 DIFFICULTY_GUIDE = {
     "하": (
-        "일상적으로 쓰이는 2~3글자 명사를 골라줘. 너무 유치하거나 매턴 똑같은 단어(예: 사과, 바나나 같은 뻔한 단어) "
-        "반복은 피하고, 초등학생도 알 만한 수준에서 다양하게 골라줘."
+        "유치원생~초등학교 저학년도 바로 알 수 있는 아주 쉽고 흔한 2글자 명사만 사용해 "
+        "(예: 사과, 바나나, 강아지, 고양이, 학교, 나무, 하늘, 구름 같은 수준). "
+        "사자성어, 한자어, 전문용어, 3글자 이상의 단어는 절대 쓰지 마. "
+        "그리고 일부러 상대가 잇기 쉬운, 흔한 글자로 끝나는 단어를 골라줘. "
+        "같은 단어만 계속 반복하지는 말고, 쉬운 단어 안에서 다양하게 골라줘."
     ),
     "중": (
         "3~4글자의 일반 성인이 아는 단어를 폭넓게 사용해. 사자성어, 전문 용어, 지명, 학술 용어도 섞어서 "
@@ -193,10 +196,22 @@ DIFFICULTY_GUIDE = {
 
 def get_ai_word(api_key, used_words, prev_word, difficulty, rejected_words=None):
     expected_chars = acceptable_next_chars(prev_word[-1]) if prev_word else None
+    is_opening_move = prev_word is None
+
+    if is_opening_move:
+        # 챗봇이 게임의 첫 단어를 낼 때는 상대가 아직 한 턴도 안 한 상태이므로,
+        # 난이도(특히 '상'의 공격적인 전략)와 상관없이 무난하고 평범한 단어로 시작한다.
+        difficulty_instruction = (
+            "지금은 게임의 아주 첫 단어를 네가 먼저 내는 상황이야. 상대는 아직 한 턴도 하지 않았으니 "
+            "'한방단어'(알루미늄, 늄으로 끝나는 단어, 겹받침 등 상대를 바로 궁지에 모는 단어)는 "
+            "절대 쓰지 마. 누구나 쉽게 이어갈 수 있는 평범하고 무난한 2~3글자 명사로 시작해."
+        )
+    else:
+        difficulty_instruction = f"난이도는 '{difficulty}'이고, 지침: {DIFFICULTY_GUIDE[difficulty]}"
 
     system = (
         "너는 한국어 끝말잇기 게임을 하는 상대야. "
-        f"난이도는 '{difficulty}'이고, 지침: {DIFFICULTY_GUIDE[difficulty]} "
+        f"{difficulty_instruction} "
         "규칙: 반드시 실제로 존재하는 한국어 '명사'만 사용하고, "
         "형용사나 동사의 활용형(관형사형 포함)은 명사가 아니니 절대 내면 안 돼. "
         "예를 들어 '슬픈', '예쁜', '빠른', '먹은'은 명사가 아니라 형용사·동사 활용형이라 무효야. "
