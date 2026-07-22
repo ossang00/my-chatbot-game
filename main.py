@@ -332,6 +332,8 @@ elif st.session_state.stage == "playing":
             }
             render_timer()
 
+        error_slot = st.empty()
+
         with st.form("word_form", clear_on_submit=True):
             word = st.text_input("단어 입력", key="word_input")
             submitted = st.form_submit_button("제출")
@@ -352,18 +354,18 @@ elif st.session_state.stage == "playing":
 
             ok, msg = check_chain_rule(prev_word, word)
             if not ok:
-                st.error(msg)
+                error_slot.error(msg)
             elif word in used_words:
-                st.error("이미 사용한 단어예요.")
+                error_slot.error("이미 사용한 단어예요.")
             else:
                 with st.spinner("단어 확인 중..."):
                     try:
                         valid, reason, _ = validate_user_word(st.session_state.api_key, word)
                     except Exception as e:
-                        st.error(f"API 호출 중 오류가 발생했어요: {e}")
+                        error_slot.error(f"API 호출 중 오류가 발생했어요: {e}")
                         valid = None
                 if valid is False:
-                    st.error(f"유효하지 않은 단어예요: {reason}")
+                    error_slot.error(f"유효하지 않은 단어예요: {reason}")
                 elif valid is True:
                     st.session_state.history.append({"word": word, "by": "나"})
                     st.session_state.turn = "챗봇"
