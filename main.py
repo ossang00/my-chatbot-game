@@ -4,7 +4,6 @@ import time
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
-from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="끝말잇기 챗봇 배틀", page_icon="⏱️", layout="centered")
 
@@ -160,6 +159,22 @@ def autofocus_word_input():
     )
 
 
+@st.fragment(run_every=0.3)
+def render_timer():
+    """제한시간 표시 전용 fragment. 이 부분만 0.3초마다 갱신되고,
+    입력 폼이 있는 나머지 화면은 영향받지 않는다."""
+    elapsed_so_far = time.time() - st.session_state.turn_start
+    remaining = max(0.0, st.session_state.time_limit - elapsed_so_far)
+    st.progress(min(1.0, remaining / st.session_state.time_limit))
+    st.markdown(f"#### 남은 시간: {remaining:0.1f}초")
+
+    if remaining <= 0:
+        st.session_state.winner = "챗봇"
+        st.session_state.reason = "시간 초과로 패배했어요."
+        st.session_state.stage = "over"
+        st.rerun()
+
+
 # ---------------------------------------------------------
 # 세션 상태 초기화
 # ---------------------------------------------------------
@@ -242,18 +257,7 @@ elif st.session_state.stage == "playing":
         if is_free_first_move:
             st.info("첫 단어는 시간 제한 없이 자유롭게 입력하세요.")
         else:
-            st_autorefresh(interval=300, key="user_timer_refresh")
-
-            elapsed_so_far = time.time() - st.session_state.turn_start
-            remaining = max(0.0, st.session_state.time_limit - elapsed_so_far)
-            st.progress(min(1.0, remaining / st.session_state.time_limit))
-            st.markdown(f"#### 남은 시간: {remaining:0.1f}초")
-
-            if remaining <= 0:
-                st.session_state.winner = "챗봇"
-                st.session_state.reason = "시간 초과로 패배했어요."
-                st.session_state.stage = "over"
-                st.rerun()
+            render_timer()
 
         with st.form("word_form", clear_on_submit=True):
             word = st.text_input("단어 입력", key="word_input")
