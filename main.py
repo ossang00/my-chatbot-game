@@ -359,7 +359,7 @@ st.title("⏱️ 끝말잇기 챗봇 배틀")
 # 1) 셋업 화면
 # ---------------------------------------------------------
 if st.session_state.stage == "setup":
-    st.caption("실시간 끝말잇기 대결! 느리면 점수가 깎이고, 시간 초과되면 바로 패배해요.")
+    st.caption("실시간 끝말잇기 대결! 시간 초과되면 바로 패배해요.")
 
     api_key = st.secrets.get("SOLAR_API_KEY", "")
     if not api_key:
