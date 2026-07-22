@@ -1,7 +1,6 @@
 import json
 import time
 
-import pandas as pd
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
@@ -230,12 +229,17 @@ elif st.session_state.stage == "playing":
     col2.metric("🤖 챗봇 점수", ai_total)
 
     prev_word = st.session_state.history[-1]["word"] if st.session_state.history else None
-    if prev_word:
-        st.markdown(f"### 현재 단어: **{prev_word}**")
-    else:
+    used_words = [h["word"] for h in st.session_state.history]
+
+    if not st.session_state.history:
         st.markdown("### 첫 단어를 자유롭게 시작하세요!")
 
-    used_words = [h["word"] for h in st.session_state.history]
+    for h in st.session_state.history:
+        role = "user" if h["by"] == "나" else "assistant"
+        avatar = "🙋" if h["by"] == "나" else "🤖"
+        with st.chat_message(role, avatar=avatar):
+            st.markdown(f"**{h['word']}**")
+            st.caption(f"{h['elapsed']}초 · {h['score']}점")
 
     if st.session_state.turn == "나":
         is_free_first_move = (
@@ -262,7 +266,9 @@ elif st.session_state.stage == "playing":
             word = st.text_input("단어 입력", key="word_input")
             submitted = st.form_submit_button("제출")
 
-        autofocus_word_input()
+        if st.session_state.get("_last_focus_ts") != st.session_state.turn_start:
+            autofocus_word_input()
+            st.session_state._last_focus_ts = st.session_state.turn_start
 
         if submitted and word.strip():
             elapsed = time.time() - st.session_state.turn_start
@@ -333,12 +339,6 @@ elif st.session_state.stage == "playing":
         st.session_state.turn_start = time.time()
         st.rerun()
 
-    if st.session_state.history:
-        st.markdown("---")
-        st.markdown("#### 진행 기록")
-        df = pd.DataFrame(st.session_state.history)
-        st.dataframe(df[["by", "word", "elapsed", "score"]], use_container_width=True, hide_index=True)
-
 # ---------------------------------------------------------
 # 3) 게임 종료 화면
 # ---------------------------------------------------------
@@ -354,13 +354,12 @@ else:
 
     if st.session_state.history:
         st.markdown("#### 전체 기록")
-        df = pd.DataFrame(st.session_state.history)
-        df.insert(0, "라운드", df.index + 1)
-        st.dataframe(
-            df.rename(columns={"by": "플레이어", "word": "단어", "elapsed": "소요시간(초)", "score": "점수"}),
-            use_container_width=True,
-            hide_index=True,
-        )
+        for h in st.session_state.history:
+            role = "user" if h["by"] == "나" else "assistant"
+            avatar = "🙋" if h["by"] == "나" else "🤖"
+            with st.chat_message(role, avatar=avatar):
+                st.markdown(f"**{h['word']}**")
+                st.caption(f"{h['elapsed']}초 · {h['score']}점")
 
     if st.button("다시 시작", use_container_width=True):
         for k in ["stage", "history", "turn", "turn_start", "winner", "reason"]:
