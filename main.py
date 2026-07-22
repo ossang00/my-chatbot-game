@@ -136,17 +136,35 @@ def get_ai_word(api_key, used_words, prev_word, difficulty):
 
 
 def autofocus_word_input():
-    """단어 입력창에 커서를 자동으로 옮겨준다 (rerun마다 다시 호출됨)."""
+    """단어 입력창에 커서를 옮기고, 엔터 키를 누르면 제출 버튼을 눌러준다.
+    (턴이 바뀔 때 한 번만 호출됨)"""
     components.html(
         """
         <script>
         setTimeout(function() {
             const doc = window.parent.document;
             const inputs = doc.querySelectorAll('input[type="text"]');
-            if (inputs.length > 0) {
-                const target = inputs[inputs.length - 1];
-                target.focus();
-            }
+            if (inputs.length === 0) return;
+            const target = inputs[inputs.length - 1];
+            target.focus();
+
+            target.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    let node = target;
+                    while (
+                        node &&
+                        node.tagName !== 'FORM' &&
+                        node.getAttribute('data-testid') !== 'stForm'
+                    ) {
+                        node = node.parentElement;
+                    }
+                    if (node) {
+                        const btn = node.querySelector('button');
+                        if (btn) btn.click();
+                    }
+                }
+            });
         }, 80);
         </script>
         """,
