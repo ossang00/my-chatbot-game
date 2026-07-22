@@ -136,14 +136,17 @@ DIFFICULTY_GUIDE = {
 }
 
 
-def get_ai_word(api_key, used_words, prev_word, difficulty):
+def get_ai_word(api_key, used_words, prev_word, difficulty, rejected_words=None):
+    expected_chars = acceptable_next_chars(prev_word[-1]) if prev_word else None
+
     system = (
         "너는 한국어 끝말잇기 게임을 하는 상대야. "
         f"난이도는 '{difficulty}'이고, 지침: {DIFFICULTY_GUIDE[difficulty]} "
         "규칙: 반드시 실제로 존재하는 한국어 명사만 사용하고, "
         "이미 사용된 단어는 다시 쓰면 안 되고, "
         "직전 단어의 마지막 글자(두음법칙 허용)로 시작하는 단어를 제시해야 해. "
-        "정말 이어갈 단어가 없으면 포기해도 돼. "
+        "규칙을 지키는 게 최우선이니 제시하기 전에 스스로 다시 한번 확인해. "
+        "정말로 이어갈 단어가 하나도 없을 때만 포기해도 돼. "
         "다른 설명이나 코드블록 없이 JSON 객체 하나만 출력해: "
         '{"word": "단어" 또는 null, "give_up": true 또는 false}'
     )
@@ -152,9 +155,45 @@ def get_ai_word(api_key, used_words, prev_word, difficulty):
         f"직전 단어: {prev_display}\n"
         f"이미 사용된 단어들: {', '.join(used_words) if used_words else '없음'}"
     )
+    if expected_chars:
+        user_msg += f"\n다음 단어는 반드시 이 글자들 중 하나로 시작해야 해: {', '.join(sorted(expected_chars))}"
+    if rejected_words:
+        user_msg += (
+            f"\n다음 단어들은 방금 규칙 위반이나 오류로 거절됐어. 다시 내지 마: "
+            f"{', '.join(rejected_words)}"
+        )
+
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user_msg}]
     result, elapsed = call_solar(api_key, messages, max_tokens=100)
     return result.get("word"), result.get("give_up", False), elapsed
+
+
+def get_ai_word_with_retries(api_key, used_words, prev_word, difficulty, time_limit, max_attempts=3):
+    """챗봇이 규칙 위반이나 실수로 곧바로 지지 않도록, 정말 포기하기 전까지 몇 번 더 시도해본다.
+    반환값: (word 또는 None, give_up 여부, 총 걸린 시간)"""
+    rejected = []
+    total_elapsed = 0.0
+
+    for attempt in range(max_attempts):
+        word, give_up, elapsed = get_ai_word(
+            api_key, used_words, prev_word, difficulty, rejected_words=rejected
+        )
+        total_elapsed += elapsed
+
+        if give_up or not word:
+            return None, True, total_elapsed
+
+        ok = check_chain_rule(prev_word, word)[0] if prev_word else True
+        if ok and word not in used_words:
+            return word, False, total_elapsed
+
+        # 규칙 위반이나 중복 단어면 실패로 기록하고 다시 시도
+        rejected.append(word)
+        if total_elapsed > time_limit:
+            break
+
+    # 정해진 횟수를 다 써도 유효한 단어를 못 찾으면 포기한 것으로 처리
+    return None, True, total_elapsed
 
 
 def autofocus_word_input():
@@ -327,25 +366,18 @@ elif st.session_state.stage == "playing":
             st.markdown("#### 🤖 챗봇이 답변을 준비하고 있어요...")
             try:
                 with st.spinner("챗봇이 생각 중..."):
-                    word, give_up, api_elapsed = get_ai_word(
-                        st.session_state.api_key, used_words, prev_word, st.session_state.difficulty
+                    word, give_up, api_elapsed = get_ai_word_with_retries(
+                        st.session_state.api_key,
+                        used_words,
+                        prev_word,
+                        st.session_state.difficulty,
+                        st.session_state.time_limit,
                     )
             except Exception as e:
                 st.error(f"API 호출 중 오류가 발생했어요: {e}")
                 st.stop()
 
-            if word:
-                ok, _ = check_chain_rule(prev_word, word)
-            else:
-                ok = False
-
-            is_loss = (
-                give_up
-                or not word
-                or api_elapsed > st.session_state.time_limit
-                or not ok
-                or word in used_words
-            )
+            is_loss = give_up or not word or api_elapsed > st.session_state.time_limit
 
             st.session_state.ai_call_done = True
             st.session_state.ai_result_word = word
