@@ -178,15 +178,20 @@ def autofocus_word_input():
 @st.fragment(run_every=0.3)
 def render_timer():
     """제한시간 표시 전용 fragment. 이 부분만 0.3초마다 갱신되고,
-    입력 폼이 있는 나머지 화면은 영향받지 않는다."""
+    입력 폼이 있는 나머지 화면은 영향받지 않는다.
+    시간이 다 되면 st.session_state.timeout_result 에 미리 저장해둔
+    {"winner": ..., "reason": ...} 값으로 게임을 종료시킨다."""
     elapsed_so_far = time.time() - st.session_state.turn_start
     remaining = max(0.0, st.session_state.time_limit - elapsed_so_far)
     st.progress(min(1.0, remaining / st.session_state.time_limit))
     st.markdown(f"#### 남은 시간: {remaining:0.1f}초")
 
     if remaining <= 0:
-        st.session_state.winner = "챗봇"
-        st.session_state.reason = "시간 초과로 패배했어요."
+        result = st.session_state.get(
+            "timeout_result", {"winner": "챗봇", "reason": "시간 초과로 패배했어요."}
+        )
+        st.session_state.winner = result["winner"]
+        st.session_state.reason = result["reason"]
         st.session_state.stage = "over"
         st.rerun()
 
@@ -273,6 +278,10 @@ elif st.session_state.stage == "playing":
         if is_free_first_move:
             st.info("첫 단어는 시간 제한 없이 자유롭게 입력하세요.")
         else:
+            st.session_state.timeout_result = {
+                "winner": "챗봇",
+                "reason": "시간 초과로 패배했어요.",
+            }
             render_timer()
 
         with st.form("word_form", clear_on_submit=True):
@@ -314,37 +323,52 @@ elif st.session_state.stage == "playing":
                     st.rerun()
 
     else:  # 챗봇 턴
-        st.markdown("#### 🤖 챗봇이 답변을 준비하고 있어요...")
-        try:
-            with st.spinner("챗봇이 생각 중..."):
-                word, give_up, elapsed = get_ai_word(
-                    st.session_state.api_key, used_words, prev_word, st.session_state.difficulty
-                )
-        except Exception as e:
-            st.error(f"API 호출 중 오류가 발생했어요: {e}")
-            st.stop()
+        if not st.session_state.get("ai_call_done", False):
+            st.markdown("#### 🤖 챗봇이 답변을 준비하고 있어요...")
+            try:
+                with st.spinner("챗봇이 생각 중..."):
+                    word, give_up, api_elapsed = get_ai_word(
+                        st.session_state.api_key, used_words, prev_word, st.session_state.difficulty
+                    )
+            except Exception as e:
+                st.error(f"API 호출 중 오류가 발생했어요: {e}")
+                st.stop()
 
-        if give_up or not word:
-            st.session_state.winner = "나"
-            st.session_state.reason = "챗봇이 이어갈 단어를 찾지 못해 패배했어요."
-            st.session_state.stage = "over"
-            st.rerun()
-
-        ok, _ = check_chain_rule(prev_word, word)
-        if elapsed > st.session_state.time_limit or not ok or word in used_words:
-            if elapsed > st.session_state.time_limit:
-                reason = "챗봇이 제한시간을 넘겨서 패배했어요."
+            if word:
+                ok, _ = check_chain_rule(prev_word, word)
             else:
-                reason = "챗봇이 규칙에 맞지 않는 단어를 내서 패배했어요."
-            st.session_state.winner = "나"
-            st.session_state.reason = reason
-            st.session_state.stage = "over"
+                ok = False
+
+            is_loss = (
+                give_up
+                or not word
+                or api_elapsed > st.session_state.time_limit
+                or not ok
+                or word in used_words
+            )
+
+            st.session_state.ai_call_done = True
+            st.session_state.ai_result_word = word
+            st.session_state.ai_result_is_loss = is_loss
             st.rerun()
 
-        st.session_state.history.append({"word": word, "by": "챗봇"})
-        st.session_state.turn = "나"
-        st.session_state.turn_start = time.time()
-        st.rerun()
+        elif st.session_state.ai_result_is_loss:
+            # 챗봇이 사실상 진 상황이어도, 실제로 제한시간이 다 지날 때까지는
+            # 타이머가 끝까지 흐르도록 보여준 뒤에 패배 처리한다.
+            st.markdown("#### 🤖 챗봇이 고민하고 있어요...")
+            st.session_state.timeout_result = {
+                "winner": "나",
+                "reason": "챗봇이 제한시간을 넘겨서 패배했어요.",
+            }
+            render_timer()
+
+        else:
+            st.session_state.history.append({"word": st.session_state.ai_result_word, "by": "챗봇"})
+            st.session_state.turn = "나"
+            st.session_state.turn_start = time.time()
+            for k in ("ai_call_done", "ai_result_word", "ai_result_is_loss"):
+                st.session_state.pop(k, None)
+            st.rerun()
 
 # ---------------------------------------------------------
 # 3) 게임 종료 화면
@@ -362,6 +386,10 @@ else:
                 st.markdown(f"**{h['word']}**")
 
     if st.button("다시 시작", use_container_width=True):
-        for k in ["stage", "history", "turn", "turn_start", "winner", "reason"]:
+        keys_to_clear = [
+            "stage", "history", "turn", "turn_start", "winner", "reason",
+            "ai_call_done", "ai_result_word", "ai_result_is_loss", "timeout_result",
+        ]
+        for k in keys_to_clear:
             st.session_state.pop(k, None)
         st.rerun()
