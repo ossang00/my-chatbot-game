@@ -143,30 +143,16 @@ def get_ai_word(api_key, used_words, prev_word, difficulty):
 
 
 def autofocus_word_input():
-    """단어 입력창에 커서를 옮기고, 엔터 키를 누르면 제출 버튼을 눌러준다.
-    (턴이 바뀔 때 한 번만 호출됨)"""
+    """단어 입력창에 커서를 옮겨준다 (턴이 바뀔 때 한 번만 호출됨)."""
     components.html(
         """
         <script>
         setTimeout(function() {
             const doc = window.parent.document;
             const inputs = doc.querySelectorAll('input[type="text"]');
-            if (inputs.length === 0) return;
-            const target = inputs[inputs.length - 1];
-            target.focus();
-
-            target.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const buttons = doc.querySelectorAll('button');
-                    for (let i = buttons.length - 1; i >= 0; i--) {
-                        if (buttons[i].textContent.trim() === '제출') {
-                            buttons[i].click();
-                            break;
-                        }
-                    }
-                }
-            });
+            if (inputs.length > 0) {
+                inputs[inputs.length - 1].focus();
+            }
         }, 80);
         </script>
         """,
