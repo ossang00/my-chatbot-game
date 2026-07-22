@@ -4,6 +4,7 @@ import time
 import pandas as pd
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="끝말잇기 챗봇 배틀", page_icon="⏱️", layout="centered")
@@ -140,6 +141,25 @@ def compute_score(elapsed, time_limit):
     return round(ratio * 100)
 
 
+def autofocus_word_input():
+    """단어 입력창에 커서를 자동으로 옮겨준다 (rerun마다 다시 호출됨)."""
+    components.html(
+        """
+        <script>
+        setTimeout(function() {
+            const doc = window.parent.document;
+            const inputs = doc.querySelectorAll('input[type="text"]');
+            if (inputs.length > 0) {
+                const target = inputs[inputs.length - 1];
+                target.focus();
+            }
+        }, 80);
+        </script>
+        """,
+        height=0,
+    )
+
+
 # ---------------------------------------------------------
 # 세션 상태 초기화
 # ---------------------------------------------------------
@@ -182,7 +202,7 @@ if st.session_state.stage == "setup":
 
     with st.form("setup_form"):
         difficulty = st.radio("난이도", ["하", "중", "상"], index=1, horizontal=True)
-        time_limit = st.radio("턴당 제한시간(초)", [3, 5, 10, 30], index=2, horizontal=True)
+        time_limit = st.radio("턴당 제한시간(초)", [5, 10, 30], index=1, horizontal=True)
         first_turn = st.radio("먼저 시작할 사람", ["나", "챗봇"], horizontal=True)
         submitted = st.form_submit_button("게임 시작", use_container_width=True, disabled=not api_key)
 
@@ -218,28 +238,37 @@ elif st.session_state.stage == "playing":
     used_words = [h["word"] for h in st.session_state.history]
 
     if st.session_state.turn == "나":
-        st_autorefresh(interval=300, key="user_timer_refresh")
+        is_free_first_move = (
+            not st.session_state.history and st.session_state.first_turn == "나"
+        )
 
-        elapsed_so_far = time.time() - st.session_state.turn_start
-        remaining = max(0.0, st.session_state.time_limit - elapsed_so_far)
-        st.progress(min(1.0, remaining / st.session_state.time_limit))
-        st.markdown(f"#### 남은 시간: {remaining:0.1f}초")
+        if is_free_first_move:
+            st.info("첫 단어는 시간 제한 없이 자유롭게 입력하세요.")
+        else:
+            st_autorefresh(interval=300, key="user_timer_refresh")
 
-        if remaining <= 0:
-            st.session_state.winner = "챗봇"
-            st.session_state.reason = "시간 초과로 패배했어요."
-            st.session_state.stage = "over"
-            st.rerun()
+            elapsed_so_far = time.time() - st.session_state.turn_start
+            remaining = max(0.0, st.session_state.time_limit - elapsed_so_far)
+            st.progress(min(1.0, remaining / st.session_state.time_limit))
+            st.markdown(f"#### 남은 시간: {remaining:0.1f}초")
+
+            if remaining <= 0:
+                st.session_state.winner = "챗봇"
+                st.session_state.reason = "시간 초과로 패배했어요."
+                st.session_state.stage = "over"
+                st.rerun()
 
         with st.form("word_form", clear_on_submit=True):
             word = st.text_input("단어 입력", key="word_input")
             submitted = st.form_submit_button("제출")
 
+        autofocus_word_input()
+
         if submitted and word.strip():
             elapsed = time.time() - st.session_state.turn_start
             word = word.strip()
 
-            if elapsed > st.session_state.time_limit:
+            if not is_free_first_move and elapsed > st.session_state.time_limit:
                 st.session_state.winner = "챗봇"
                 st.session_state.reason = "시간 초과로 패배했어요."
                 st.session_state.stage = "over"
@@ -260,7 +289,7 @@ elif st.session_state.stage == "playing":
                 if valid is False:
                     st.error(f"유효하지 않은 단어예요: {reason}")
                 elif valid is True:
-                    score = compute_score(elapsed, st.session_state.time_limit)
+                    score = 100 if is_free_first_move else compute_score(elapsed, st.session_state.time_limit)
                     st.session_state.history.append(
                         {"word": word, "by": "나", "elapsed": round(elapsed, 2), "score": score}
                     )
