@@ -143,6 +143,7 @@ def get_ai_word(api_key, used_words, prev_word, difficulty, rejected_words=None)
         "너는 한국어 끝말잇기 게임을 하는 상대야. "
         f"난이도는 '{difficulty}'이고, 지침: {DIFFICULTY_GUIDE[difficulty]} "
         "규칙: 반드시 실제로 존재하는 한국어 명사만 사용하고, "
+        "단어는 최소 2글자 이상이어야 하고(한 글자짜리는 안 돼), "
         "이미 사용된 단어는 다시 쓰면 안 되고, "
         "직전 단어의 마지막 글자(두음법칙 허용)로 시작하는 단어를 제시해야 해. "
         "규칙을 지키는 게 최우선이니 제시하기 전에 스스로 다시 한번 확인해. "
@@ -184,7 +185,8 @@ def get_ai_word_with_retries(api_key, used_words, prev_word, difficulty, time_li
             return None, True, total_elapsed
 
         ok = check_chain_rule(prev_word, word)[0] if prev_word else True
-        if ok and word not in used_words:
+        is_long_enough = len(word) >= 2
+        if ok and is_long_enough and word not in used_words:
             return word, False, total_elapsed
 
         # 규칙 위반이나 중복 단어면 실패로 기록하고 다시 시도
