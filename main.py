@@ -135,11 +135,6 @@ def get_ai_word(api_key, used_words, prev_word, difficulty):
     return result.get("word"), result.get("give_up", False), elapsed
 
 
-def compute_score(elapsed, time_limit):
-    ratio = max(0.0, (time_limit - elapsed) / time_limit)
-    return round(ratio * 100)
-
-
 def autofocus_word_input():
     """단어 입력창에 커서를 자동으로 옮겨준다 (rerun마다 다시 호출됨)."""
     components.html(
@@ -222,12 +217,6 @@ if st.session_state.stage == "setup":
 # 2) 플레이 화면
 # ---------------------------------------------------------
 elif st.session_state.stage == "playing":
-    my_total = sum(h["score"] for h in st.session_state.history if h["by"] == "나")
-    ai_total = sum(h["score"] for h in st.session_state.history if h["by"] == "챗봇")
-    col1, col2 = st.columns(2)
-    col1.metric("🙋 나의 점수", my_total)
-    col2.metric("🤖 챗봇 점수", ai_total)
-
     prev_word = st.session_state.history[-1]["word"] if st.session_state.history else None
     used_words = [h["word"] for h in st.session_state.history]
 
@@ -239,7 +228,6 @@ elif st.session_state.stage == "playing":
         avatar = "🙋" if h["by"] == "나" else "🤖"
         with st.chat_message(role, avatar=avatar):
             st.markdown(f"**{h['word']}**")
-            st.caption(f"{h['elapsed']}초 · {h['score']}점")
 
     if st.session_state.turn == "나":
         is_free_first_move = (
@@ -295,10 +283,7 @@ elif st.session_state.stage == "playing":
                 if valid is False:
                     st.error(f"유효하지 않은 단어예요: {reason}")
                 elif valid is True:
-                    score = 100 if is_free_first_move else compute_score(elapsed, st.session_state.time_limit)
-                    st.session_state.history.append(
-                        {"word": word, "by": "나", "elapsed": round(elapsed, 2), "score": score}
-                    )
+                    st.session_state.history.append({"word": word, "by": "나"})
                     st.session_state.turn = "챗봇"
                     st.session_state.turn_start = time.time()
                     st.rerun()
@@ -331,10 +316,7 @@ elif st.session_state.stage == "playing":
             st.session_state.stage = "over"
             st.rerun()
 
-        score = compute_score(elapsed, st.session_state.time_limit)
-        st.session_state.history.append(
-            {"word": word, "by": "챗봇", "elapsed": round(elapsed, 2), "score": score}
-        )
+        st.session_state.history.append({"word": word, "by": "챗봇"})
         st.session_state.turn = "나"
         st.session_state.turn_start = time.time()
         st.rerun()
@@ -346,12 +328,6 @@ else:
     st.markdown(f"### 🏁 승자: {'🙋 나' if st.session_state.winner == '나' else '🤖 챗봇'}")
     st.info(st.session_state.reason)
 
-    my_total = sum(h["score"] for h in st.session_state.history if h["by"] == "나")
-    ai_total = sum(h["score"] for h in st.session_state.history if h["by"] == "챗봇")
-    col1, col2 = st.columns(2)
-    col1.metric("🙋 나의 최종 점수", my_total)
-    col2.metric("🤖 챗봇 최종 점수", ai_total)
-
     if st.session_state.history:
         st.markdown("#### 전체 기록")
         for h in st.session_state.history:
@@ -359,7 +335,6 @@ else:
             avatar = "🙋" if h["by"] == "나" else "🤖"
             with st.chat_message(role, avatar=avatar):
                 st.markdown(f"**{h['word']}**")
-                st.caption(f"{h['elapsed']}초 · {h['score']}점")
 
     if st.button("다시 시작", use_container_width=True):
         for k in ["stage", "history", "turn", "turn_start", "winner", "reason"]:
