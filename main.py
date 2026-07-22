@@ -406,9 +406,6 @@ elif st.session_state.stage == "playing":
 # 3) 게임 종료 화면
 # ---------------------------------------------------------
 else:
-    st.markdown(f"### 🏁 승자: {'🙋 나' if st.session_state.winner == '나' else '🤖 챗봇'}")
-    st.info(st.session_state.reason)
-
     if st.session_state.history:
         st.markdown("#### 전체 기록")
         for h in st.session_state.history:
@@ -416,6 +413,9 @@ else:
             avatar = "🙋" if h["by"] == "나" else "🤖"
             with st.chat_message(role, avatar=avatar):
                 st.markdown(f"**{h['word']}**")
+
+    st.markdown(f"### 🏁 승자: {'🙋 나' if st.session_state.winner == '나' else '🤖 챗봇'}")
+    st.info(st.session_state.reason)
 
     if st.button("다시 시작", use_container_width=True):
         keys_to_clear = [
