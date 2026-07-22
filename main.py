@@ -56,7 +56,7 @@ def check_chain_rule(prev_word, next_word):
 # ---------------------------------------------------------
 # Solar API 호출 (Upstage, OpenAI 호환 형식)
 # ---------------------------------------------------------
-def _call_solar_once(api_key, messages, max_tokens=150, model="solar-pro2"):
+def _call_solar_once(api_key, messages, max_tokens=150, model="solar-pro2", temperature=0.8):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -65,7 +65,7 @@ def _call_solar_once(api_key, messages, max_tokens=150, model="solar-pro2"):
         "model": model,
         "messages": messages,
         "max_tokens": max_tokens,
-        "temperature": 0.8,
+        "temperature": temperature,
     }
     start = time.time()
     resp = requests.post(
@@ -93,30 +93,53 @@ def _call_solar_once(api_key, messages, max_tokens=150, model="solar-pro2"):
     return obj, elapsed
 
 
-def call_solar(api_key, messages, max_tokens=150, model="solar-pro2"):
+def call_solar(api_key, messages, max_tokens=150, model="solar-pro2", temperature=0.8):
     """JSON 파싱이 실패하면 한 번 더 자동으로 재시도한다."""
     last_error = None
     for _ in range(2):
         try:
-            return _call_solar_once(api_key, messages, max_tokens=max_tokens, model=model)
+            return _call_solar_once(
+                api_key, messages, max_tokens=max_tokens, model=model, temperature=temperature
+            )
         except (ValueError, json.JSONDecodeError) as e:
             last_error = e
             continue
     raise last_error
 
 
-def validate_user_word(api_key, word):
+def _validate_user_word_once(api_key, word):
     system = (
-        "너는 한국어 끝말잇기 게임의 심판이야. 제시된 단어가 "
+        "너는 한국어 어휘에 정통한 심판이야. 표준국어대사전 기준으로, 제시된 단어가 "
         "실제로 존재하는 한국어 단어(명사)인지만 판단해. "
+        "다음과 같은 유형도 전부 명백히 유효한 단어로 취급해: "
+        "구체명사(사과, 책상), 추상명사(회한, 슬픔, 자유, 우정, 인내), 감정·심리 관련 명사, "
+        "전문용어·학술용어(어류, 양서류, 광합성), 한자어, 외래어, 고유명사(지명·인명이 아닌 일반적 고유명사), "
+        "옛말이 아닌 이상 다소 예스럽거나 문어체적인 단어. "
+        "네가 즉시 뜻이 떠오르지 않더라도, 실제 한국어에 존재할 법한 단어라면 무효로 판단하지 마. "
+        "명백히 오타이거나, 존재하지 않는 조합이거나, 명사가 아닌 동사·형용사 활용형(예: '먹다', '예쁘게')일 때만 무효로 판단해. "
         "이미 사용된 단어인지 여부나 글자 이어짐 규칙은 이미 다른 곳에서 확인이 끝났으니 신경 쓰지 마. "
         "다른 설명이나 코드블록 없이 JSON 객체 하나만 출력해: "
         '{"valid": true 또는 false, "reason": "짧은 이유"}'
     )
     user_msg = f"단어: {word}"
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user_msg}]
-    result, elapsed = call_solar(api_key, messages, max_tokens=100)
+    result, elapsed = call_solar(api_key, messages, max_tokens=100, temperature=0.1)
     return result.get("valid", False), result.get("reason", ""), elapsed
+
+
+def validate_user_word(api_key, word, max_checks=3):
+    """무효 판정이 나오면, 실수(할루시네이션)일 수 있으니 재확인한다.
+    여러 번 물어봐서 단 한 번이라도 유효하다고 하면 유효로 인정하고,
+    max_checks번 모두 무효라고 해야만 최종적으로 무효 처리한다."""
+    total_elapsed = 0.0
+    last_reason = ""
+    for _ in range(max_checks):
+        valid, reason, elapsed = _validate_user_word_once(api_key, word)
+        total_elapsed += elapsed
+        last_reason = reason
+        if valid:
+            return True, reason, total_elapsed
+    return False, last_reason, total_elapsed
 
 
 DIFFICULTY_GUIDE = {
