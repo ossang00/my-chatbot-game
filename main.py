@@ -105,11 +105,18 @@ def validate_user_word(api_key, word, used_words):
 
 
 DIFFICULTY_GUIDE = {
-    "하": "누구나 아는 아주 쉽고 흔한 2글자 단어 위주로 골라줘. 상대를 배려해줘.",
-    "중": "일반적으로 널리 쓰이는 단어를 자유롭게 골라줘.",
+    "하": (
+        "일상적으로 쓰이는 2~3글자 명사를 골라줘. 너무 유치하거나 매턴 똑같은 단어(예: 사과, 바나나 같은 뻔한 단어) "
+        "반복은 피하고, 초등학생도 알 만한 수준에서 다양하게 골라줘."
+    ),
+    "중": (
+        "3~4글자의 일반 성인이 아는 단어를 폭넓게 사용해. 사자성어, 전문 용어, 지명, 학술 용어도 섞어서 "
+        "상대가 방심하지 않게 만들어줘."
+    ),
     "상": (
-        "일부러 상대가 잇기 어려운, 흔치 않은 글자로 끝나는 어려운 단어를 골라서 "
-        "상대를 최대한 곤란하게 만들어줘. 단, 실제 존재하는 단어여야 해."
+        "3~5글자의 어렵고 희귀한 단어(전문 용어, 고사성어, 한자어, 잘 안 쓰이는 명사 등)를 적극적으로 사용해. "
+        "특히 'ㅔ, ㅢ, ㅑ, ㅘ' 등 다음 사람이 잇기 힘든 글자로 끝나는 단어를 우선적으로 골라서 "
+        "상대를 최대한 궁지에 몰아넣어줘. 절대 쉬운 단어를 봐주지 마. 단, 실제 존재하는 단어여야 해."
     ),
 }
 
@@ -151,17 +158,12 @@ def autofocus_word_input():
             target.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    let node = target;
-                    while (
-                        node &&
-                        node.tagName !== 'FORM' &&
-                        node.getAttribute('data-testid') !== 'stForm'
-                    ) {
-                        node = node.parentElement;
-                    }
-                    if (node) {
-                        const btn = node.querySelector('button');
-                        if (btn) btn.click();
+                    const buttons = doc.querySelectorAll('button');
+                    for (let i = buttons.length - 1; i >= 0; i--) {
+                        if (buttons[i].textContent.trim() === '제출') {
+                            buttons[i].click();
+                            break;
+                        }
                     }
                 }
             });
