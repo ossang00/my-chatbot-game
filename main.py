@@ -105,16 +105,15 @@ def call_solar(api_key, messages, max_tokens=150, model="solar-pro2"):
     raise last_error
 
 
-def validate_user_word(api_key, word, used_words):
+def validate_user_word(api_key, word):
     system = (
         "너는 한국어 끝말잇기 게임의 심판이야. 제시된 단어가 "
-        "1) 실제로 존재하는 한국어 단어(명사)이고, "
-        "2) 이미 사용된 단어 목록에 없는지 판단해. "
-        "글자 이어짐 규칙은 이미 확인이 끝났으니 신경 쓰지 마. "
+        "실제로 존재하는 한국어 단어(명사)인지만 판단해. "
+        "이미 사용된 단어인지 여부나 글자 이어짐 규칙은 이미 다른 곳에서 확인이 끝났으니 신경 쓰지 마. "
         "다른 설명이나 코드블록 없이 JSON 객체 하나만 출력해: "
         '{"valid": true 또는 false, "reason": "짧은 이유"}'
     )
-    user_msg = f"단어: {word}\n이미 사용된 단어들: {', '.join(used_words) if used_words else '없음'}"
+    user_msg = f"단어: {word}"
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user_msg}]
     result, elapsed = call_solar(api_key, messages, max_tokens=100)
     return result.get("valid", False), result.get("reason", ""), elapsed
@@ -302,7 +301,7 @@ elif st.session_state.stage == "playing":
             else:
                 with st.spinner("단어 확인 중..."):
                     try:
-                        valid, reason, _ = validate_user_word(st.session_state.api_key, word, used_words)
+                        valid, reason, _ = validate_user_word(st.session_state.api_key, word)
                     except Exception as e:
                         st.error(f"API 호출 중 오류가 발생했어요: {e}")
                         valid = None
