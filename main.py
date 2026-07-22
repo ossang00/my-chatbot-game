@@ -8,39 +8,55 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="끝말잇기 챗봇 배틀", page_icon="⏱️", layout="centered")
 
 # ---------------------------------------------------------
-# 두음법칙 등가 그룹 (ㄹ/ㄴ ↔ ㅇ 계열 변환 허용)
+# 두음법칙 (ㄹ→ㄴ/ㅇ, ㄴ→ㅇ) - 받침 유무와 상관없이 모든 음절에 적용
 # ---------------------------------------------------------
-EQUIV_PAIRS = [
-    ("라", "나"), ("래", "내"), ("러", "너"), ("로", "노"), ("루", "누"), ("르", "느"),
-    ("랴", "야"), ("려", "여"), ("례", "예"), ("료", "요"), ("류", "유"), ("리", "이"),
-    ("냐", "야"), ("녀", "여"), ("녜", "예"), ("뇨", "요"), ("뉴", "유"), ("니", "이"),
+CHOSUNG_LIST = [
+    "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ",
+    "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ",
 ]
+JUNGSUNG_LIST = [
+    "ㅏ", "ㅐ", "ㅑ", "ㅒ", "ㅓ", "ㅔ", "ㅕ", "ㅖ", "ㅗ", "ㅘ",
+    "ㅙ", "ㅚ", "ㅛ", "ㅜ", "ㅝ", "ㅞ", "ㅟ", "ㅠ", "ㅡ", "ㅢ", "ㅣ",
+]
+# ㅑ, ㅕ, ㅖ, ㅛ, ㅠ, ㅣ 처럼 반모음 'ㅣ' 계열이 낀 모음 (두음법칙에서 ㄹ이 아예 탈락하는 경우)
+Y_GLIDE_JUNG_INDICES = {2, 6, 7, 12, 17, 20}
+CHO_RIEUL = CHOSUNG_LIST.index("ㄹ")
+CHO_NIEUN = CHOSUNG_LIST.index("ㄴ")
+CHO_IEUNG = CHOSUNG_LIST.index("ㅇ")
 
 
-def _build_equiv_map(pairs):
-    graph = {}
-    for a, b in pairs:
-        graph.setdefault(a, set()).add(b)
-        graph.setdefault(b, set()).add(a)
-    closure = {}
-    for node in graph:
-        seen = {node}
-        stack = [node]
-        while stack:
-            cur = stack.pop()
-            for nxt in graph.get(cur, ()):
-                if nxt not in seen:
-                    seen.add(nxt)
-                    stack.append(nxt)
-        closure[node] = seen
-    return closure
+def _decompose_syllable(ch):
+    code = ord(ch) - 0xAC00
+    if code < 0 or code > 11171:
+        return None
+    cho = code // (21 * 28)
+    jung = (code % (21 * 28)) // 28
+    jong = code % 28
+    return cho, jung, jong
 
 
-EQUIV_MAP = _build_equiv_map(EQUIV_PAIRS)
+def _compose_syllable(cho, jung, jong):
+    return chr(0xAC00 + (cho * 21 + jung) * 28 + jong)
 
 
 def acceptable_next_chars(last_char):
-    return EQUIV_MAP.get(last_char, {last_char})
+    """직전 단어의 마지막 글자를 기준으로, 다음 단어가 시작할 수 있는 글자들을 계산한다.
+    받침이 있든 없든 모든 음절에 두음법칙(ㄹ→ㄴ/ㅇ, ㄴ→ㅇ)을 일반적으로 적용한다.
+    예: 람→남, 력→역, 랑→낭, 리→이 등."""
+    decomposed = _decompose_syllable(last_char)
+    if decomposed is None:
+        return {last_char}
+
+    cho, jung, jong = decomposed
+    result = {last_char}
+
+    if cho == CHO_RIEUL:
+        alt_cho = CHO_IEUNG if jung in Y_GLIDE_JUNG_INDICES else CHO_NIEUN
+        result.add(_compose_syllable(alt_cho, jung, jong))
+    elif cho == CHO_NIEUN and jung in Y_GLIDE_JUNG_INDICES:
+        result.add(_compose_syllable(CHO_IEUNG, jung, jong))
+
+    return result
 
 
 def check_chain_rule(prev_word, next_word):
