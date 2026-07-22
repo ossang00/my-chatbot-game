@@ -53,6 +53,13 @@ def check_chain_rule(prev_word, next_word):
     return False, f"'{prev_word}'의 마지막 글자 '{last_char}'로 시작하는 단어가 아니에요."
 
 
+def is_pure_hangul_word(word):
+    """완성형 한글 음절로만 이루어진 단어인지 확인한다 (특수문자·영문·숫자·공백 등은 불허)."""
+    if not word:
+        return False
+    return all("가" <= ch <= "힣" for ch in word)
+
+
 # ---------------------------------------------------------
 # Solar API 호출 (Upstage, OpenAI 호환 형식)
 # ---------------------------------------------------------
@@ -116,7 +123,9 @@ def _validate_user_word_once(api_key, word):
         "전문용어·학술용어(어류, 양서류, 광합성), 한자어, 외래어, 고유명사(지명·인명이 아닌 일반적 고유명사), "
         "옛말이 아닌 이상 다소 예스럽거나 문어체적인 단어. "
         "네가 즉시 뜻이 떠오르지 않더라도, 실제 한국어에 존재할 법한 단어라면 무효로 판단하지 마. "
-        "명백히 오타이거나, 존재하지 않는 조합이거나, 명사가 아닌 동사·형용사 활용형(예: '먹다', '예쁘게')일 때만 무효로 판단해. "
+        "명백히 오타이거나, 존재하지 않는 조합이거나, 명사가 아닌 동사·형용사 활용형일 때만 무효로 판단해. "
+        "특히 '슬픈', '예쁜', '빠른', '먹은', '좋은'처럼 형용사·동사에 '-ㄴ/-은/-는'이 붙어 뒷말을 꾸미는 "
+        "관형사형은 명사가 아니므로 무효야. 대신 그에 대응하는 명사형(슬픔, 아름다움, 속도, 식사, 장점 등)은 유효해. "
         "이미 사용된 단어인지 여부나 글자 이어짐 규칙은 이미 다른 곳에서 확인이 끝났으니 신경 쓰지 마. "
         "다른 설명이나 코드블록 없이 JSON 객체 하나만 출력해: "
         '{"valid": true 또는 false, "reason": "짧은 이유"}'
@@ -172,7 +181,10 @@ def get_ai_word(api_key, used_words, prev_word, difficulty, rejected_words=None)
     system = (
         "너는 한국어 끝말잇기 게임을 하는 상대야. "
         f"난이도는 '{difficulty}'이고, 지침: {DIFFICULTY_GUIDE[difficulty]} "
-        "규칙: 반드시 실제로 존재하는 한국어 명사만 사용하고, "
+        "규칙: 반드시 실제로 존재하는 한국어 '명사'만 사용하고, "
+        "형용사나 동사의 활용형(관형사형 포함)은 명사가 아니니 절대 내면 안 돼. "
+        "예를 들어 '슬픈', '예쁜', '빠른', '먹은'은 명사가 아니라 형용사·동사 활용형이라 무효야. "
+        "대신 그 뜻에 해당하는 명사형(예: 슬픔, 아름다움, 속도, 식사)을 사용해. "
         "단어는 최소 2글자 이상이어야 하고(한 글자짜리는 안 돼), "
         "이미 사용된 단어는 다시 쓰면 안 되고, "
         "직전 단어의 마지막 글자(두음법칙 허용)로 시작하는 단어를 제시해야 해. "
@@ -214,12 +226,22 @@ def get_ai_word_with_retries(api_key, used_words, prev_word, difficulty, time_li
         if give_up or not word:
             return None, True, total_elapsed
 
+        word = word.strip()
         ok = check_chain_rule(prev_word, word)[0] if prev_word else True
         is_long_enough = len(word) >= 2
-        if ok and is_long_enough and word not in used_words:
-            return word, False, total_elapsed
+        is_hangul = is_pure_hangul_word(word)
 
-        # 규칙 위반이나 중복 단어면 실패로 기록하고 다시 시도
+        if ok and is_long_enough and is_hangul and word not in used_words:
+            # 명사가 맞는지(형용사·동사 활용형이 아닌지) 한 번 더 확인한다.
+            try:
+                is_noun, _, noun_check_elapsed = validate_user_word(api_key, word, max_checks=1)
+                total_elapsed += noun_check_elapsed
+            except Exception:
+                is_noun = True  # 검증 자체가 실패하면(네트워크 등) 통과시켜준다.
+            if is_noun:
+                return word, False, total_elapsed
+
+        # 규칙 위반, 명사가 아니거나, 중복 단어면 실패로 기록하고 다시 시도
         rejected.append(word)
         if total_elapsed > time_limit:
             break
@@ -376,7 +398,9 @@ elif st.session_state.stage == "playing":
                 st.rerun()
 
             ok, msg = check_chain_rule(prev_word, word)
-            if not ok:
+            if not is_pure_hangul_word(word):
+                error_slot.error("한글 단어만 입력할 수 있어요. (특수문자·영문·숫자·띄어쓰기 불가)")
+            elif not ok:
                 error_slot.error(msg)
             elif word in used_words:
                 error_slot.error("이미 사용한 단어예요.")
