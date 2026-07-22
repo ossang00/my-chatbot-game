@@ -56,7 +56,7 @@ def check_chain_rule(prev_word, next_word):
 # ---------------------------------------------------------
 # Solar API 호출 (Upstage, OpenAI 호환 형식)
 # ---------------------------------------------------------
-def call_solar(api_key, messages, max_tokens=150, model="solar-pro2"):
+def _call_solar_once(api_key, messages, max_tokens=150, model="solar-pro2"):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -85,7 +85,24 @@ def call_solar(api_key, messages, max_tokens=150, model="solar-pro2"):
         if cleaned.lower().startswith("json"):
             cleaned = cleaned[4:]
         cleaned = cleaned.strip()
-    return json.loads(cleaned), elapsed
+    # 응답 앞뒤로 부연설명이나 여분의 텍스트가 붙어와도, 첫 JSON 객체 하나만 읽어들인다.
+    start_idx = cleaned.find("{")
+    if start_idx == -1:
+        raise ValueError(f"응답에서 JSON을 찾을 수 없어요: {cleaned!r}")
+    obj, _ = json.JSONDecoder().raw_decode(cleaned[start_idx:])
+    return obj, elapsed
+
+
+def call_solar(api_key, messages, max_tokens=150, model="solar-pro2"):
+    """JSON 파싱이 실패하면 한 번 더 자동으로 재시도한다."""
+    last_error = None
+    for _ in range(2):
+        try:
+            return _call_solar_once(api_key, messages, max_tokens=max_tokens, model=model)
+        except (ValueError, json.JSONDecodeError) as e:
+            last_error = e
+            continue
+    raise last_error
 
 
 def validate_user_word(api_key, word, used_words):
